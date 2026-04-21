@@ -1,4 +1,5 @@
 import os
+import time
 import math
 import requests
 import tkinter as tk
@@ -12,9 +13,9 @@ from matplotlib.ticker import MultipleLocator
 # ============================================================
 # CONFIGURAZIONI E COSTANTI
 # ============================================================
-NUM_TEST = 3
+NUM_TEST = 10
 TEMPERATURA = 1.2
-RIPETIZIONI_PER_DOMANDA = 3
+RIPETIZIONI_PER_DOMANDA = 5
 URL_OLLAMA = 'http://localhost:11434/api/generate'
 os.environ["HF_TOKEN"] = "ProgettoSemestre"
 
@@ -165,11 +166,13 @@ def esegui_benchmark() -> RisultatiBenchmark:
             if token_grezzi:
                 print(f"Vettore Token Rilevati (Top 10): [{', '.join(token_grezzi)}]")
 
-            # Iniettiamo i dati direttamente nella lista della nostra variabile principale
+            # Iniettiamo i dati nella lista della nostra variabile principale
             dati_domanda["alternative"].append({
                 "domanda_alt": domanda_corrente,
                 "risposta_pulita": risposta_pulita,
-                "prob_unita_alt": f"T:{f"{p_true*100:.8f}%"} F:{f"{p_false*100:.8f}%"} O:{f"{p_altri*100:.8f}%"}"
+                "prob_unita_alt": f"T:{(p_true*100):.8f}% F:{(p_false*100):.8f}% O:{(p_altri*100):.8f}%",
+                "p_true_raw": p_true,   
+                "p_false_raw": p_false  
             })
 
             prompt_perturbazione = (
@@ -202,7 +205,7 @@ def esegui_benchmark() -> RisultatiBenchmark:
         valori = sorted([conteggi["true"], conteggi["false"]], reverse=True)
         chiave_distribuzione = f"{valori[0]}-{valori[1]}"
         esito_corretto = (risposta_scelta_modello == risposta_reale)
-
+        #matrice di confusione 
         if esito_corretto:
             risultati.dist_corrette[chiave_distribuzione] = risultati.dist_corrette.get(chiave_distribuzione, 0) + 1
             if risposta_reale == "true":
@@ -215,12 +218,11 @@ def esegui_benchmark() -> RisultatiBenchmark:
                 risultati.fp += 1
             else:
                 risultati.fn += 1
-
+        #medie delle distribuzioni 
         perc_true_avg  = (somma_prob_true  / RIPETIZIONI_PER_DOMANDA) * 100
         perc_false_avg = (somma_prob_false / RIPETIZIONI_PER_DOMANDA) * 100
         perc_altri_avg = (somma_prob_altri / RIPETIZIONI_PER_DOMANDA) * 100
 
-        # Aggiorniamo gli ultimi campi della nostra variabile
         dati_domanda["prob_media_unita"] = f"T:{perc_true_avg:.8f}% F:{perc_false_avg:.8f}% A:{perc_altri_avg:.8f}%"
         dati_domanda["generata_dist"] = chiave_distribuzione
         dati_domanda["corretta"] = esito_corretto
@@ -232,12 +234,66 @@ def esegui_benchmark() -> RisultatiBenchmark:
 
 
 # ============================================================
+# ANALYZER: CALCOLO STATISTICHE ENTROPIA
+# ============================================================
+def analyzer(risultati: RisultatiBenchmark) -> RisultatiBenchmark:
+    for riga in risultati.risultati_per_tabella:
+        entropie = []
+        somma_norm_t = 0.0
+        somma_norm_f = 0.0
+        
+        for alt in riga["alternative"]:
+            p_t = alt.get("p_true_raw", 0.0)
+            p_f = alt.get("p_false_raw", 0.0)
+            
+            # Normalizzazione True/False rispetto allo spazio T/F
+            somma_parziale = p_t + p_f
+            if somma_parziale > 0:
+                n_t = p_t / somma_parziale
+                n_f = p_f / somma_parziale
+            else:
+                n_t, n_f = 0.0, 0.0
+                
+            # Calcolo entropia della singola distribuzione normalizzata
+            ent_singola = 0.0
+            if n_t > 0: ent_singola -= n_t * math.log2(n_t)
+            if n_f > 0: ent_singola -= n_f * math.log2(n_f)
+            
+            entropie.append(ent_singola)
+            somma_norm_t += n_t
+            somma_norm_f += n_f
+        # k = numero di ripetizioni 
+        k = len(riga["alternative"])
+        if k > 0:
+            # entropia minima / massima
+            riga["min_ent"] = min(entropie)
+            riga["max_ent"] = max(entropie)
+            
+            # Entropia della media delle Distribuzioni 
+            avg_n_t = somma_norm_t / k
+            avg_n_f = somma_norm_f / k
+            
+            ent_media = 0.0
+            if avg_n_t > 0: ent_media -= avg_n_t * math.log2(avg_n_t)
+            if avg_n_f > 0: ent_media -= avg_n_f * math.log2(avg_n_f)
+            
+            riga["avg_ent"] = ent_media
+        else:
+            riga["min_ent"] = 0.0
+            riga["max_ent"] = 0.0
+            riga["avg_ent"] = 0.0
+            
+    return risultati
+
+
+# ============================================================
 # INTERFACCIA GRAFICA
 # ============================================================
 def mostra_interfaccia_completa(res: RisultatiBenchmark):
     finestra = tk.Tk()
+    # Ho allargato leggermente la finestra a 1350 per dare spazio alle 3 nuove colonne
     finestra.title(f"Report Benchmark ({RIPETIZIONI_PER_DOMANDA} Ripetizioni su {NUM_TEST} Domande)")
-    finestra.geometry("1200x650") 
+    finestra.geometry("1350x650") 
 
     notebook = ttk.Notebook(finestra)
     notebook.pack(fill='both', expand=True, padx=10, pady=10)
@@ -268,25 +324,35 @@ def mostra_interfaccia_completa(res: RisultatiBenchmark):
     frame_tabella = tk.Frame(tab1)
     frame_tabella.pack(side=tk.TOP, fill="both", expand=True, padx=10, pady=5)
 
-    # <-- Aggiunta la colonna ID qui sotto
-    colonne = ("ID", "Domanda", "Probabilita", "Distribuzione", "Reale")
+    # <-- Aggiunte colonne entropia
+    colonne = ("ID", "Domanda", "Probabilita", "Distribuzione", "Reale", "MinEnt", "MaxEnt", "AvgEnt")
     tabella = ttk.Treeview(frame_tabella, columns=colonne, show="tree headings")
 
     tabella.heading("#0", text="")
     tabella.column("#0", width=40, stretch=tk.NO, anchor="center")
     
-    # <-- Formattazione della nuova colonna ID
     tabella.heading("ID", text="N°")
     tabella.column("ID", width=40, anchor="center")
     
     tabella.heading("Domanda", text="Domanda Originale / Varianti")
     tabella.column("Domanda", width=250)
+    
     tabella.heading("Probabilita", text=f"Medie (%T / %F / %O) [{RIPETIZIONI_PER_DOMANDA} Rip]")
-    tabella.column("Probabilita", width=400, anchor="center")
+    tabella.column("Probabilita", width=380, anchor="center")
+    
     tabella.heading("Distribuzione", text="Dist. [Rip.]")
     tabella.column("Distribuzione", width=70, anchor="center")
+    
     tabella.heading("Reale", text="Reale")
     tabella.column("Reale", width=80, anchor="center")
+    
+    # <-- Formattazione colonne entropia
+    tabella.heading("MinEnt", text="MinEnt")
+    tabella.column("MinEnt", width=60, anchor="center")
+    tabella.heading("MaxEnt", text="MaxEnt")
+    tabella.column("MaxEnt", width=60, anchor="center")
+    tabella.heading("AvgEnt", text="AvgEnt")
+    tabella.column("AvgEnt", width=60, anchor="center")
 
     scrollbar = ttk.Scrollbar(frame_tabella, orient=tk.VERTICAL, command=tabella.yview)
     tabella.configure(yscroll=scrollbar.set)
@@ -299,21 +365,28 @@ def mostra_interfaccia_completa(res: RisultatiBenchmark):
 
     for riga in res.risultati_per_tabella:
         colore = "verde" if riga["corretta"] else "rosso"
+        
+        # <-- Inserimento risultati entropia calcolati nella riga padre
         padre_id = tabella.insert("", tk.END, text="", values=(
-            riga["id"], # <-- Inserito il valore per la colonna ID
+            riga["id"], 
             riga["domanda"][:60] + "...", 
             riga["prob_media_unita"], 
             riga["generata_dist"], 
-            riga["reale"].upper()
+            riga["reale"].upper(),
+            f"{riga.get('min_ent', 0):.3f}",
+            f"{riga.get('max_ent', 0):.3f}",
+            f"{riga.get('avg_ent', 0):.3f}"
         ), tags=(colore,))
 
         for i, alt in enumerate(riga["alternative"]):
+            # <-- Voci di entropia vuote per i nodi figlio, come richiesto
             tabella.insert(padre_id, tk.END, text=f"{i + 1}.", values=(
-                "", # <-- Lasciato vuoto per i sottomenù in modo da mantenere l'ordine visivo
+                "", 
                 " ↳ " + alt["domanda_alt"][:65] + "...", 
                 alt['prob_unita_alt'], 
                 "-", 
-                alt["risposta_pulita"].upper()
+                alt["risposta_pulita"].upper(),
+                "", "", ""
             ), tags=("figlio",))
 
     # ── SCHEDA 2 E 3 ... ──
@@ -377,4 +450,8 @@ def mostra_interfaccia_completa(res: RisultatiBenchmark):
 
 if __name__ == "__main__":
     dati_benchmark = esegui_benchmark()
+    
+    # <-- INIEZIONE DELL'ANALYZER
+    dati_benchmark = analyzer(dati_benchmark)
+    
     mostra_interfaccia_completa(dati_benchmark)

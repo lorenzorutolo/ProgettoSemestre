@@ -13,9 +13,9 @@ from matplotlib.ticker import MultipleLocator
 # ============================================================
 # CONFIGURAZIONI E COSTANTI
 # ============================================================
-NUM_TEST = 10
+NUM_TEST = 50
 TEMPERATURA = 1.2
-RIPETIZIONI_PER_DOMANDA = 5
+RIPETIZIONI_PER_DOMANDA = 8
 URL_OLLAMA = 'http://localhost:11434/api/generate'
 os.environ["HF_TOKEN"] = "ProgettoSemestre"
 
@@ -38,7 +38,7 @@ class RisultatiBenchmark:
 # ESTRAE LE PROBABILITÀ GREZZE
 # ============================================================
 def estrai_prob_da_logprobs(resp_eval: dict) -> tuple:
-    p_true  = 0.0
+    p_true = 0.0
     p_false = 0.0
     p_altri = 0.0
     lista_token_grezzi = []
@@ -46,16 +46,16 @@ def estrai_prob_da_logprobs(resp_eval: dict) -> tuple:
     logprobs = resp_eval.get('logprobs', [])
     if isinstance(logprobs, list) and len(logprobs) > 0:
         candidati_top_k = logprobs[0].get('top_logprobs', [])
-        
+
         for candidato in candidati_top_k:
             token_originale = candidato.get('token', '')
             testo_candidato = token_originale.strip().lower()
-            
+
             prob_lineare = math.exp(candidato.get('logprob', -100))
-            lista_token_grezzi.append(f"'{token_originale}': {prob_lineare*100:.8f}%")
+            lista_token_grezzi.append(f"'{token_originale}': {prob_lineare * 100:.8f}%")
 
             if "true" in testo_candidato:
-                p_true  += prob_lineare
+                p_true += prob_lineare
             elif "false" in testo_candidato:
                 p_false += prob_lineare
             else:
@@ -98,18 +98,18 @@ def esegui_benchmark() -> RisultatiBenchmark:
         risposta_reale = str(riga['answer']).lower()
 
         print(f"\nElaborazione Domanda {i + 1}/{NUM_TEST}")
-        
+
         conteggi = {"true": 0, "false": 0, "altri": 0}
-        somma_prob_true  = 0.0
+        somma_prob_true = 0.0
         somma_prob_false = 0.0
         somma_prob_altri = 0.0
         distribuzioni_ripetizioni = []
 
         dati_domanda = {
-            "id": i + 1, 
+            "id": i + 1,
             "domanda": domanda,
             "reale": risposta_reale,
-            "alternative": [], 
+            "alternative": [],
             "prob_media_unita": "",
             "generata_dist": "",
             "corretta": False
@@ -119,7 +119,7 @@ def esegui_benchmark() -> RisultatiBenchmark:
 
         for rep in range(RIPETIZIONI_PER_DOMANDA):
             label = "Original Question " if rep == 0 else "Alternative Question"
-            #prompt iniziale dove chiediamo di rispondere true e false
+            # prompt iniziale dove chiediamo di rispondere true e false
             prompt_iniziale = (
                 f"You are a strict reading comprehension assistant. Read the following passage carefully.\n"
                 f"Your response must be exactly one word: either 'True' or 'False'. Do not include any explanations, introductory text, or punctuation.\n\n"
@@ -127,7 +127,7 @@ def esegui_benchmark() -> RisultatiBenchmark:
                 f"Question: {domanda_corrente}\n\n"
                 f"Answer:"
             )
-            #payload iniziale 
+            # payload iniziale
             payload_iniziale = {
                 'model': 'llama3',
                 'prompt': prompt_iniziale,
@@ -137,15 +137,15 @@ def esegui_benchmark() -> RisultatiBenchmark:
                 'logprobs': True,
                 'top_logprobs': 10
             }
-            #resp eval contiene la risposta del modello completa che comprende nome modello, token utilizzati, temperatura, contesto (illeggibile così com'è)
+            # resp eval contiene la risposta del modello completa che comprende nome modello, token utilizzati, temperatura, contesto (illeggibile così com'è)
             resp_eval = interroga_ollama(payload_iniziale)
             if not resp_eval:
                 continue
-            #prendiamo la risposta alla chiave "response" e se non esiste mettimao una stringa vuota
+            # prendiamo la risposta alla chiave "response" e se non esiste mettimao una stringa vuota
             testo_generato = resp_eval.get('response', '').strip().lower()
-            #togliamo punti, virgola parentesi ecc..
-            risposta_pulita = testo_generato.replace(".", "").replace(",", "").replace("(","").replace("_","")
-            print("\n risposa pulita",risposta_pulita)
+            # togliamo punti, virgola parentesi ecc..
+            risposta_pulita = testo_generato.replace(".", "").replace(",", "").replace("(", "").replace("_", "")
+            print("\n risposa pulita", risposta_pulita)
 
             if "true" in risposta_pulita:
                 conteggi["true"] += 1
@@ -155,10 +155,10 @@ def esegui_benchmark() -> RisultatiBenchmark:
                 conteggi["altri"] += 1
 
             p_true, p_false, p_altri, token_grezzi = estrai_prob_da_logprobs(resp_eval)
-            
+
             distribuzioni_ripetizioni.append(f"({p_true:.8f}, {p_false:.8f}, {p_altri:.8f})")
 
-            somma_prob_true  += p_true
+            somma_prob_true += p_true
             somma_prob_false += p_false
             somma_prob_altri += p_altri
 
@@ -170,9 +170,9 @@ def esegui_benchmark() -> RisultatiBenchmark:
             dati_domanda["alternative"].append({
                 "domanda_alt": domanda_corrente,
                 "risposta_pulita": risposta_pulita,
-                "prob_unita_alt": f"T:{(p_true*100):.8f}% F:{(p_false*100):.8f}% O:{(p_altri*100):.8f}%",
-                "p_true_raw": p_true,   
-                "p_false_raw": p_false  
+                "prob_unita_alt": f"T:{(p_true * 100):.8f}% F:{(p_false * 100):.8f}% O:{(p_altri * 100):.8f}%",
+                "p_true_raw": p_true,
+                "p_false_raw": p_false
             })
 
             prompt_perturbazione = (
@@ -205,7 +205,7 @@ def esegui_benchmark() -> RisultatiBenchmark:
         valori = sorted([conteggi["true"], conteggi["false"]], reverse=True)
         chiave_distribuzione = f"{valori[0]}-{valori[1]}"
         esito_corretto = (risposta_scelta_modello == risposta_reale)
-        #matrice di confusione 
+        # matrice di confusione
         if esito_corretto:
             risultati.dist_corrette[chiave_distribuzione] = risultati.dist_corrette.get(chiave_distribuzione, 0) + 1
             if risposta_reale == "true":
@@ -218,8 +218,8 @@ def esegui_benchmark() -> RisultatiBenchmark:
                 risultati.fp += 1
             else:
                 risultati.fn += 1
-        #medie delle distribuzioni 
-        perc_true_avg  = (somma_prob_true  / RIPETIZIONI_PER_DOMANDA) * 100
+        # medie delle distribuzioni
+        perc_true_avg = (somma_prob_true / RIPETIZIONI_PER_DOMANDA) * 100
         perc_false_avg = (somma_prob_false / RIPETIZIONI_PER_DOMANDA) * 100
         perc_altri_avg = (somma_prob_altri / RIPETIZIONI_PER_DOMANDA) * 100
 
@@ -241,11 +241,11 @@ def analyzer(risultati: RisultatiBenchmark) -> RisultatiBenchmark:
         entropie = []
         somma_norm_t = 0.0
         somma_norm_f = 0.0
-        
+
         for alt in riga["alternative"]:
             p_t = alt.get("p_true_raw", 0.0)
             p_f = alt.get("p_false_raw", 0.0)
-            
+
             # Normalizzazione True/False rispetto allo spazio T/F
             somma_parziale = p_t + p_f
             if somma_parziale > 0:
@@ -253,47 +253,46 @@ def analyzer(risultati: RisultatiBenchmark) -> RisultatiBenchmark:
                 n_f = p_f / somma_parziale
             else:
                 n_t, n_f = 0.0, 0.0
-                
+
             # Calcolo entropia della singola distribuzione normalizzata
             ent_singola = 0.0
             if n_t > 0: ent_singola -= n_t * math.log2(n_t)
             if n_f > 0: ent_singola -= n_f * math.log2(n_f)
-            
+
             entropie.append(ent_singola)
             somma_norm_t += n_t
             somma_norm_f += n_f
-        # k = numero di ripetizioni 
+        # k = numero di ripetizioni
         k = len(riga["alternative"])
         if k > 0:
             # entropia minima / massima
             riga["min_ent"] = min(entropie)
             riga["max_ent"] = max(entropie)
-            
-            # Entropia della media delle Distribuzioni 
+
+            # Entropia della media delle Distribuzioni
             avg_n_t = somma_norm_t / k
             avg_n_f = somma_norm_f / k
-            
+
             ent_media = 0.0
             if avg_n_t > 0: ent_media -= avg_n_t * math.log2(avg_n_t)
             if avg_n_f > 0: ent_media -= avg_n_f * math.log2(avg_n_f)
-            
+
             riga["avg_ent"] = ent_media
         else:
             riga["min_ent"] = 0.0
             riga["max_ent"] = 0.0
             riga["avg_ent"] = 0.0
-            
+
     return risultati
 
 
 # ============================================================
-# INTERFACCIA GRAFICA
+# INTERFACCIA GRAFICA (AGGIORNATA CON I NUOVI PLOT)
 # ============================================================
 def mostra_interfaccia_completa(res: RisultatiBenchmark):
     finestra = tk.Tk()
-    # Ho allargato leggermente la finestra a 1350 per dare spazio alle 3 nuove colonne
     finestra.title(f"Report Benchmark ({RIPETIZIONI_PER_DOMANDA} Ripetizioni su {NUM_TEST} Domande)")
-    finestra.geometry("1350x650") 
+    finestra.geometry("1350x650")
 
     notebook = ttk.Notebook(finestra)
     notebook.pack(fill='both', expand=True, padx=10, pady=10)
@@ -310,43 +309,40 @@ def mostra_interfaccia_completa(res: RisultatiBenchmark):
     # Matrice di confusione
     frame_matrice = tk.Frame(tab1)
     frame_matrice.pack(side=tk.BOTTOM, pady=10)
-    tk.Label(frame_matrice, text="Matrice di Confusione", font=("Helvetica", 12, "bold")).grid(row=0, column=0, columnspan=3, pady=5)
+    tk.Label(frame_matrice, text="Matrice di Confusione", font=("Helvetica", 12, "bold")).grid(row=0, column=0,
+                                                                                               columnspan=3, pady=5)
     tk.Label(frame_matrice, text="Modello: True").grid(row=1, column=1)
     tk.Label(frame_matrice, text="Modello: False").grid(row=1, column=2)
     tk.Label(frame_matrice, text="Realtà: True").grid(row=2, column=0)
-    tk.Label(frame_matrice, text=f"TP\n{res.tp}", bg="#c6efce", width=10, height=2, relief="groove").grid(row=2, column=1)
-    tk.Label(frame_matrice, text=f"FN\n{res.fn}", bg="#ffc7ce", width=10, height=2, relief="groove").grid(row=2, column=2)
+    tk.Label(frame_matrice, text=f"TP\n{res.tp}", bg="#c6efce", width=10, height=2, relief="groove").grid(row=2,
+                                                                                                          column=1)
+    tk.Label(frame_matrice, text=f"FN\n{res.fn}", bg="#ffc7ce", width=10, height=2, relief="groove").grid(row=2,
+                                                                                                          column=2)
     tk.Label(frame_matrice, text="Realtà: False").grid(row=3, column=0)
-    tk.Label(frame_matrice, text=f"FP\n{res.fp}", bg="#ffc7ce", width=10, height=2, relief="groove").grid(row=3, column=1)
-    tk.Label(frame_matrice, text=f"TN\n{res.tn}", bg="#c6efce", width=10, height=2, relief="groove").grid(row=3, column=2)
+    tk.Label(frame_matrice, text=f"FP\n{res.fp}", bg="#ffc7ce", width=10, height=2, relief="groove").grid(row=3,
+                                                                                                          column=1)
+    tk.Label(frame_matrice, text=f"TN\n{res.tn}", bg="#c6efce", width=10, height=2, relief="groove").grid(row=3,
+                                                                                                          column=2)
 
     # Tabella
     frame_tabella = tk.Frame(tab1)
     frame_tabella.pack(side=tk.TOP, fill="both", expand=True, padx=10, pady=5)
 
-    # <-- Aggiunte colonne entropia
     colonne = ("ID", "Domanda", "Probabilita", "Distribuzione", "Reale", "MinEnt", "MaxEnt", "AvgEnt")
     tabella = ttk.Treeview(frame_tabella, columns=colonne, show="tree headings")
 
     tabella.heading("#0", text="")
     tabella.column("#0", width=40, stretch=tk.NO, anchor="center")
-    
     tabella.heading("ID", text="N°")
     tabella.column("ID", width=40, anchor="center")
-    
     tabella.heading("Domanda", text="Domanda Originale / Varianti")
     tabella.column("Domanda", width=250)
-    
     tabella.heading("Probabilita", text=f"Medie (%T / %F / %O) [{RIPETIZIONI_PER_DOMANDA} Rip]")
     tabella.column("Probabilita", width=380, anchor="center")
-    
     tabella.heading("Distribuzione", text="Dist. [Rip.]")
     tabella.column("Distribuzione", width=70, anchor="center")
-    
     tabella.heading("Reale", text="Reale")
     tabella.column("Reale", width=80, anchor="center")
-    
-    # <-- Formattazione colonne entropia
     tabella.heading("MinEnt", text="MinEnt")
     tabella.column("MinEnt", width=60, anchor="center")
     tabella.heading("MaxEnt", text="MaxEnt")
@@ -365,13 +361,11 @@ def mostra_interfaccia_completa(res: RisultatiBenchmark):
 
     for riga in res.risultati_per_tabella:
         colore = "verde" if riga["corretta"] else "rosso"
-        
-        # <-- Inserimento risultati entropia calcolati nella riga padre
         padre_id = tabella.insert("", tk.END, text="", values=(
-            riga["id"], 
-            riga["domanda"][:60] + "...", 
-            riga["prob_media_unita"], 
-            riga["generata_dist"], 
+            riga["id"],
+            riga["domanda"][:60] + "...",
+            riga["prob_media_unita"],
+            riga["generata_dist"],
             riga["reale"].upper(),
             f"{riga.get('min_ent', 0):.3f}",
             f"{riga.get('max_ent', 0):.3f}",
@@ -379,18 +373,18 @@ def mostra_interfaccia_completa(res: RisultatiBenchmark):
         ), tags=(colore,))
 
         for i, alt in enumerate(riga["alternative"]):
-            # <-- Voci di entropia vuote per i nodi figlio, come richiesto
             tabella.insert(padre_id, tk.END, text=f"{i + 1}.", values=(
-                "", 
-                " ↳ " + alt["domanda_alt"][:65] + "...", 
-                alt['prob_unita_alt'], 
-                "-", 
+                "",
+                " ↳ " + alt["domanda_alt"][:65] + "...",
+                alt['prob_unita_alt'],
+                "-",
                 alt["risposta_pulita"].upper(),
                 "", "", ""
             ), tags=("figlio",))
 
-    # ── SCHEDA 2 E 3 ... ──
-    categorie_x = [f"{k}-{RIPETIZIONI_PER_DOMANDA - k}" for k in range(RIPETIZIONI_PER_DOMANDA, math.ceil(RIPETIZIONI_PER_DOMANDA / 2) - 1, -1)]
+    # ── SCHEDA 3 E 4 (I TUOI PLOT ORIGINALI) ──
+    categorie_x = [f"{k}-{RIPETIZIONI_PER_DOMANDA - k}" for k in
+                   range(RIPETIZIONI_PER_DOMANDA, math.ceil(RIPETIZIONI_PER_DOMANDA / 2) - 1, -1)]
     chiavi_extra = sorted(set(res.dist_corrette.keys()).union(set(res.dist_errate.keys())), reverse=True)
     for key in chiavi_extra:
         if key not in categorie_x:
@@ -400,7 +394,7 @@ def mostra_interfaccia_completa(res: RisultatiBenchmark):
     domande_sbagliate = [res.dist_errate.get(cat, 0) for cat in categorie_x]
 
     tab3 = ttk.Frame(notebook)
-    notebook.add(tab3, text="Conteggio Domande")
+    notebook.add(tab3, text="Conteggio per Distrib.")
     fig3 = Figure(figsize=(6, 4), dpi=100)
     ax3 = fig3.add_subplot(111)
     ax3.bar(categorie_x, domande_giuste, color='#4CAF50', label='Domande Corrette')
@@ -414,7 +408,7 @@ def mostra_interfaccia_completa(res: RisultatiBenchmark):
     FigureCanvasTkAgg(fig3, master=tab3).get_tk_widget().pack(fill='both', expand=True, padx=10, pady=10)
 
     tab4 = ttk.Frame(notebook)
-    notebook.add(tab4, text="Diagramma di Calibrazione (%)")
+    notebook.add(tab4, text="Calibrazione per Distrib.")
     perc_giuste = [(g / (g + s) * 100) if (g + s) > 0 else 0 for g, s in zip(domande_giuste, domande_sbagliate)]
     perc_sbagliate = [(s / (g + s) * 100) if (g + s) > 0 else 0 for g, s in zip(domande_giuste, domande_sbagliate)]
     fig4 = Figure(figsize=(6, 4), dpi=100)
@@ -422,7 +416,8 @@ def mostra_interfaccia_completa(res: RisultatiBenchmark):
     x = range(len(categorie_x))
     width = 0.35
     bars_giuste = ax4.bar([i - width / 2 for i in x], perc_giuste, width, color='#4CAF50', label='Domande Corrette (%)')
-    bars_errate = ax4.bar([i + width / 2 for i in x], perc_sbagliate, width, color='#F44336', label='Domande Errate (%)')
+    bars_errate = ax4.bar([i + width / 2 for i in x], perc_sbagliate, width, color='#F44336',
+                          label='Domande Errate (%)')
 
     def annota_barre(bars, color):
         for bar in bars:
@@ -445,13 +440,103 @@ def mostra_interfaccia_completa(res: RisultatiBenchmark):
     ax4.grid(axis='y', linestyle='--', alpha=0.7)
     FigureCanvasTkAgg(fig4, master=tab4).get_tk_widget().pack(fill='both', expand=True, padx=10, pady=10)
 
+    # ============================================================
+    # NUOVI PLOT AGGIUNTI (MAX ENTROPIA E AVG ENTROPIA)
+    # ============================================================
+
+    # Prepariamo le liste filtrando per risposte giuste e sbagliate
+    max_ent_corrette = [r.get("max_ent", 0.0) for r in res.risultati_per_tabella if r["corretta"]]
+    max_ent_errate = [r.get("max_ent", 0.0) for r in res.risultati_per_tabella if not r["corretta"]]
+
+    avg_ent_corrette = [r.get("avg_ent", 0.0) for r in res.risultati_per_tabella if r["corretta"]]
+    avg_ent_errate = [r.get("avg_ent", 0.0) for r in res.risultati_per_tabella if not r["corretta"]]
+
+    # ── SCHEDA 5: BOXPLOT MAX ENTROPIA ──
+    tab5 = ttk.Frame(notebook)
+    notebook.add(tab5, text="Boxplot MaxEnt")
+    fig5 = Figure(figsize=(6, 4), dpi=100)
+    ax5 = fig5.add_subplot(111)
+
+    # Crea il boxplot. Se una lista è vuota passiamo uno 0 temporaneo per non far crashare matplotlib
+    dati_max = [max_ent_corrette if max_ent_corrette else [0.0],
+                max_ent_errate if max_ent_errate else [0.0]]
+
+    bplot1 = ax5.boxplot(dati_max, labels=['Corrette', 'Errate'], patch_artist=True)
+    colors = ['#4CAF50', '#F44336']  # Verde e Rosso
+    for patch, color in zip(bplot1['boxes'], colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.7)
+
+    ax5.set_title("Distribuzione MaxEnt per Domande Corrette ed Errate")
+    ax5.set_ylabel("Entropia Massima (MaxEnt) [0.0 - 1.0]")
+    ax5.set_ylim(-0.05, 1.05)
+    ax5.grid(axis='y', linestyle='--', alpha=0.7)
+    FigureCanvasTkAgg(fig5, master=tab5).get_tk_widget().pack(fill='both', expand=True, padx=10, pady=10)
+
+    # ── SCHEDA 6: BOXPLOT AVG ENTROPIA ──
+    tab6 = ttk.Frame(notebook)
+    notebook.add(tab6, text="Boxplot AvgEnt")
+    fig6 = Figure(figsize=(6, 4), dpi=100)
+    ax6 = fig6.add_subplot(111)
+
+    dati_avg = [avg_ent_corrette if avg_ent_corrette else [0.0],
+                avg_ent_errate if avg_ent_errate else [0.0]]
+
+    bplot2 = ax6.boxplot(dati_avg, labels=['Corrette', 'Errate'], patch_artist=True)
+    for patch, color in zip(bplot2['boxes'], colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.7)
+
+    ax6.set_title("Distribuzione AvgEnt per Domande Corrette ed Errate")
+    ax6.set_ylabel("Entropia Media (AvgEnt) [0.0 - 1.0]")
+    ax6.set_ylim(-0.05, 1.05)
+    ax6.grid(axis='y', linestyle='--', alpha=0.7)
+    FigureCanvasTkAgg(fig6, master=tab6).get_tk_widget().pack(fill='both', expand=True, padx=10, pady=10)
+
+    # ── SCHEDA 7: ACCURATEZZA PER LIVELLI DI ENTROPIA (BAR CHART) ──
+    tab7 = ttk.Frame(notebook)
+    notebook.add(tab7, text="Accuratezza vs Entropia")
+    fig7 = Figure(figsize=(6, 4), dpi=100)
+    ax7 = fig7.add_subplot(111)
+
+    # Dividiamo i dati dell'AvgEnt (che misura l'incertezza globale) in 3 fasce
+    bassa = [r["corretta"] for r in res.risultati_per_tabella if r.get("avg_ent", 0.0) <= 0.3]
+    media = [r["corretta"] for r in res.risultati_per_tabella if 0.3 < r.get("avg_ent", 0.0) <= 0.7]
+    alta = [r["corretta"] for r in res.risultati_per_tabella if r.get("avg_ent", 0.0) > 0.7]
+
+    # Calcoliamo l'accuratezza % per ogni fascia. Se una fascia è vuota, mettiamo 0
+    acc_bassa = (sum(bassa) / len(bassa) * 100) if len(bassa) > 0 else 0
+    acc_media = (sum(media) / len(media) * 100) if len(media) > 0 else 0
+    acc_alta = (sum(alta) / len(alta) * 100) if len(alta) > 0 else 0
+
+    etichette_fasce = ['Bassa\n(0.0 - 0.3)', 'Media\n(0.3 - 0.7)', 'Alta\n(0.7 - 1.0)']
+    valori_accuratezza = [acc_bassa, acc_media, acc_alta]
+
+    barre_calibrazione = ax7.bar(etichette_fasce, valori_accuratezza, color='#2196F3', alpha=0.8)
+
+    # Aggiungiamo le etichette con i valori sopra ogni barra
+    for bar in barre_calibrazione:
+        altezza = bar.get_height()
+        ax7.annotate(f'{altezza:.1f}%',
+                     xy=(bar.get_x() + bar.get_width() / 2, altezza),
+                     xytext=(0, 3),  # offset verticale di 3 punti
+                     textcoords="offset points",
+                     ha='center', va='bottom', fontweight='bold')
+
+    ax7.set_title("Accuratezza del Modello per Livelli di Entropia (AvgEnt)")
+    ax7.set_xlabel("Fascia di Entropia")
+    ax7.set_ylabel("Accuratezza (%)")
+    ax7.set_ylim(0, 115)
+    ax7.grid(axis='y', linestyle='--', alpha=0.7)
+    FigureCanvasTkAgg(fig7, master=tab7).get_tk_widget().pack(fill='both', expand=True, padx=10, pady=10)
+
     finestra.mainloop()
 
 
 if __name__ == "__main__":
     dati_benchmark = esegui_benchmark()
-    
+
     # <-- INIEZIONE DELL'ANALYZER
     dati_benchmark = analyzer(dati_benchmark)
-    
+
     mostra_interfaccia_completa(dati_benchmark)

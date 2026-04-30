@@ -4,11 +4,12 @@ import requests
 import csv
 import json
 from datasets import load_dataset
+import numpy as np
 
 # ============================================================
 # CONFIGURAZIONI E COSTANTI
 # ============================================================
-NUM_TEST = 1000
+NUM_TEST = 10
 TEMPERATURA = 1.2
 RIPETIZIONI_PER_DOMANDA = 5
 URL_OLLAMA = 'http://localhost:11434/api/generate'
@@ -132,16 +133,6 @@ def esegui_benchmark() -> RisultatiBenchmark:
             if not resp_eval:
                 continue
 
-            testo_generato = resp_eval.get('response', '').strip().lower()
-            risposta_pulita = testo_generato.replace(".", "").replace(",", "").replace("(", "").replace("_", "")
-            print("\n risposa pulita", risposta_pulita)
-
-            if "true" in risposta_pulita:
-                conteggi["true"] += 1
-            elif "false" in risposta_pulita:
-                conteggi["false"] += 1
-            else:
-                conteggi["altri"] += 1
 
             p_true, p_false, p_altri, token_grezzi = estrai_prob_da_logprobs(resp_eval)
 
@@ -151,13 +142,27 @@ def esegui_benchmark() -> RisultatiBenchmark:
             somma_prob_false += p_false
             somma_prob_altri += p_altri
 
+            # Trovo il valore massimo tra le somme
+            massimo_assoluto = np.max([somma_prob_true, somma_prob_false, somma_prob_altri])
+
+            # Verifico quale delle somme corrisponde al massimo
+            if massimo_assoluto == somma_prob_true:
+                testo_generato = "true"
+                conteggi["true"] += 1
+            elif massimo_assoluto == somma_prob_false:
+                testo_generato = "false"
+                conteggi["false"] += 1
+            else:
+                testo_generato = "altro"
+                conteggi["altri"] += 1
+
             print(f"  - {label} ({rep + 1}): {domanda_corrente}")
             if token_grezzi:
                 print(f"Vettore Token Rilevati (Top 10): [{', '.join(token_grezzi)}]")
 
             dati_domanda["alternative"].append({
                 "domanda_alt": domanda_corrente,
-                "risposta_pulita": risposta_pulita,
+                "risposta_pulita": testo_generato,
                 "prob_unita_alt": f"T:{(p_true * 100):.8f}% F:{(p_false * 100):.8f}% O:{(p_altri * 100):.8f}%",
                 "p_true_raw": p_true,
                 "p_false_raw": p_false

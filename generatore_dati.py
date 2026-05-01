@@ -10,7 +10,6 @@ import numpy as np
 # CONFIGURAZIONI E COSTANTI
 # ============================================================
 NUM_TEST = 3
-TEMPERATURA = 1.2
 RIPETIZIONI_PER_DOMANDA = 2
 URL_OLLAMA = 'http://localhost:11434/api/generate'
 os.environ["HF_TOKEN"] = "ProgettoSemestre"

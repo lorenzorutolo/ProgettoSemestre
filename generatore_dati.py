@@ -123,7 +123,7 @@ def esegui_benchmark() -> RisultatiBenchmark:
                 'model': 'llama3',
                 'prompt': prompt_iniziale,
                 'stream': False,
-                'options': {'num_predict': 100, 'temperature': TEMPERATURA},
+                'options': {'num_predict': 10},
                 'raw': False,
                 'logprobs': True,
                 'top_logprobs': 10
@@ -176,7 +176,7 @@ def esegui_benchmark() -> RisultatiBenchmark:
                 'model': 'llama3',
                 'prompt': prompt_perturbazione,
                 'stream': False,
-                'options': {'num_predict': 100, 'temperature': 0.8},
+                'options': {'num_predict': 10},
                 'raw': False
             }
             resp_pert = interroga_ollama(payload_perturbazione)

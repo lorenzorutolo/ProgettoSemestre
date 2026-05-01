@@ -9,9 +9,9 @@ import numpy as np
 # ============================================================
 # CONFIGURAZIONI E COSTANTI
 # ============================================================
-NUM_TEST = 10
+NUM_TEST = 3
 TEMPERATURA = 1.2
-RIPETIZIONI_PER_DOMANDA = 5
+RIPETIZIONI_PER_DOMANDA = 2
 URL_OLLAMA = 'http://localhost:11434/api/generate'
 os.environ["HF_TOKEN"] = "ProgettoSemestre"
 
@@ -133,23 +133,20 @@ def esegui_benchmark() -> RisultatiBenchmark:
             if not resp_eval:
                 continue
 
-
             p_true, p_false, p_altri, token_grezzi = estrai_prob_da_logprobs(resp_eval)
 
             distribuzioni_ripetizioni.append(f"({p_true:.8f}, {p_false:.8f}, {p_altri:.8f})")
 
+            # Accumula le prob della singola ripetizione
             somma_prob_true += p_true
             somma_prob_false += p_false
             somma_prob_altri += p_altri
 
-            # Trovo il valore massimo tra le somme
-            massimo_assoluto = np.max([somma_prob_true, somma_prob_false, somma_prob_altri])
-
-            # Verifico quale delle somme corrisponde al massimo
-            if massimo_assoluto == somma_prob_true:
+            # Classificazione basata sulla singola ripetizione (non sulla somma cumulativa)
+            if p_true > p_false:
                 testo_generato = "true"
                 conteggi["true"] += 1
-            elif massimo_assoluto == somma_prob_false:
+            elif p_false > p_true:
                 testo_generato = "false"
                 conteggi["false"] += 1
             else:
@@ -187,9 +184,10 @@ def esegui_benchmark() -> RisultatiBenchmark:
 
         print(f"  -> Vettore distribuzioni (T, F, A): [{', '.join(distribuzioni_ripetizioni)}]")
 
-        if conteggi["true"] > conteggi["false"]:
+        # Decisione finale fuori dal loop, basata sulle somme cumulative delle prob
+        if somma_prob_true > somma_prob_false:
             risposta_scelta_modello = "true"
-        elif conteggi["false"] > conteggi["true"]:
+        elif somma_prob_false > somma_prob_true:
             risposta_scelta_modello = "false"
         else:
             risposta_scelta_modello = "pareggio"
@@ -222,8 +220,6 @@ def esegui_benchmark() -> RisultatiBenchmark:
         risultati.risultati_per_tabella.append(dati_domanda)
 
     return risultati
-
-
 # ============================================================
 # SALVATAGGIO IN CSV
 # ============================================================

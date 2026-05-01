@@ -9,8 +9,8 @@ import numpy as np
 # ============================================================
 # CONFIGURAZIONI E COSTANTI
 # ============================================================
-NUM_TEST = 3
-RIPETIZIONI_PER_DOMANDA = 2
+NUM_TEST = 50
+RIPETIZIONI_PER_DOMANDA = 3
 URL_OLLAMA = 'http://localhost:11434/api/generate'
 os.environ["HF_TOKEN"] = "ProgettoSemestre"
 
@@ -161,7 +161,9 @@ def esegui_benchmark() -> RisultatiBenchmark:
                 "risposta_pulita": testo_generato,
                 "prob_unita_alt": f"T:{(p_true * 100):.8f}% F:{(p_false * 100):.8f}% O:{(p_altri * 100):.8f}%",
                 "p_true_raw": p_true,
-                "p_false_raw": p_false
+                "p_false_raw": p_false,
+                "p_altri_raw": p_altri  
+
             })
 
             prompt_perturbazione = (
